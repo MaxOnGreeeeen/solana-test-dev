@@ -84,62 +84,6 @@ async fn check_transaction_status(
 }
 
 // С каждого кошелька отправляем транзакции всем другим кошелькам
-async fn send_transactions_another<'a>(config: &'a Config, client: Arc<RpcClient>) {
-    let mut tasks: Vec<JoinHandle<Result<(), ()>>> = vec![];
-    let (senders, receivers) = process_wallets(config);
-
-    let solana_rpc_client = RpcClient::new(config.solana_rpc_url);
-    let solana_rpc_client_ref = Arc::new(client);
-
-    let (tx, mut rx) = mpsc::channel::<String>(8);
-    let task = tokio::spawn(async move {
-        let bytes =
-            parse_bytes_from_string(&config.sender_private_key).expect("Failed to convert bytes");
-        let sender_private_key = Keypair::from_bytes(&bytes).expect("Failed to parse private key");
-        let receiver_public_key: Pubkey = get_public_key(config.receiver_public_key);
-
-        Ok(loop {
-            match rx.recv().await {
-                Some(_) => {
-                    let start_time = Instant::now();
-
-                    match send_sol(
-                        &client,
-                        &sender_private_key,
-                        &receiver_public_key,
-                        config.amount,
-                    )
-                    .await
-                    {
-                        Ok(signature) => {
-                            let duration = start_time.elapsed();
-
-                            println!("Transaction Hash: {:?}, Time: {:?}", signature, duration);
-
-                            match check_transaction_status(&client, &signature).await {
-                                Ok(value) => Ok(value),
-                                Err(err) => {
-                                    println!("Error sending transaction {}", err);
-                                    return Ok(());
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            println!("Error sending from wallet transaction",);
-                            return Ok(());
-                        }
-                    }
-                }
-                None => {
-                    println!("Channel closed, no more messages to receive.");
-                    break;
-                }
-            }
-        })
-    });
-}
-
-// С каждого кошелька отправляем транзакции всем другим кошелькам
 async fn send_transactions<'a>(config: &'a Config, client: Arc<RpcClient>) {
     let mut tasks: Vec<JoinHandle<Result<(), ()>>> = vec![];
     let (senders, receivers) = process_wallets(config);
